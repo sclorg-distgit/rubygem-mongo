@@ -8,11 +8,11 @@
 %{!?scl_mongodb:%global scl_mongodb rh-mongodb32}
 %{!?scl_prefix_mongodb:%global scl_prefix_mongodb %{scl_mongodb}-}
 
-%global enable_tests 0
+%global enable_tests 1
 
 Name:          %{?scl_prefix}rubygem-%{gem_name}
 Version:       2.2.3
-Release:       1%{?dist}
+Release:       5%{?dist}
 Summary:       Ruby driver for MongoDB
 Group:         Development/Languages
 License:       ASL 2.0
@@ -27,10 +27,7 @@ BuildRequires: %{?scl_prefix_ruby}ruby(release)
 BuildRequires: %{?scl_prefix_ruby}rubygems-devel
 # For running the tests
 BuildRequires: %{?scl_prefix}rubygem(bson)
-# Dependency missing
-#BuildRequires: %{?scl_prefix}rubygem(shoulda)
-BuildRequires: %{?scl_prefix}rubygem(mocha)
-BuildRequires: %{?scl_prefix_ruby}rubygem(test-unit)
+BuildRequires: %{?scl_prefix}rubygem(rspec)
 BuildArch:     noarch
 Provides:      %{?scl_prefix}rubygem(%{gem_name}) = %{version}
 
@@ -60,6 +57,11 @@ gem spec %{SOURCE0} -l --ruby > %{gem_name}.gemspec
 %build
 mkdir -p .%{gem_dir}
 
+# Fix missing wrapper for mongo_console executable
+# https://bugzilla.redhat.com/show_bug.cgi?id=1315283
+# https://github.com/mongodb/mongo-ruby-driver/pull/756
+sed -i "/require_paths/i   s.executables       = ['mongo_console']" mongo.gemspec
+
 # Create the gem as gem install only works on a gem file
 %{?scl:scl enable %{scl} - << \EOF}
 gem build %{gem_name}.gemspec
@@ -67,10 +69,6 @@ gem build %{gem_name}.gemspec
 %{?scl:EOF}
 
 %install
-mkdir -p .%{_bindir}
-mv .%{gem_instdir}/bin/* .%{_bindir}
-rmdir .%{gem_instdir}/bin
-
 mkdir -p %{buildroot}%{gem_dir}
 cp -a .%{gem_dir}/* %{buildroot}%{gem_dir}/
 
@@ -79,10 +77,9 @@ cp -a .%{_bindir}/* %{buildroot}%{_bindir}
 
 %check
 %if 0%{?enable_tests}
+%{?scl:scl enable %{scl} %{scl_mongodb} - << \EOF}
+set -e
 pushd .%{gem_instdir}
-
-# Spawn For Ruby 1.8 should not be needed for Ruby 1.9+.
-sed -i "/require 'sfl'/ d" test/tools/mongo_config.rb
 
 # Create data directory and start testing mongo instance.
 mkdir data
@@ -90,28 +87,23 @@ mongod \
   --dbpath data \
   --logpath data/log \
   --fork \
+  --bind_ip 127.0.0.1 \
   --auth
 
-# This should mimic the "rake test:default".
-# https://github.com/mongodb/mongo-ruby-driver/blob/1.9.2/tasks/testing.rake
-%{?scl:scl enable %{scl} %{scl_mongodb} - << \EOF}
-find test/{unit,functional,threading} -name '*_test.rb' \
-  ! -wholename 'test/functional/grid_io_test.rb' \
-  ! -wholename 'test/functional/grid_test.rb' \
-  ! -wholename 'test/functional/ssl_test.rb' \
-  | DBPATH=data JENKINS_CI=1 xargs ruby -Ilib:test
-%{?scl:EOF}
+CI="travis" rspec spec
 
 # Shutdown mongo and cleanup the data.
 mongod --shutdown --dbpath data
 rm -rf data
 popd
+%{?scl:EOF}
 %endif
 
 %files
 %license %{gem_instdir}/LICENSE
 %dir %{gem_instdir}
 %{_bindir}/mongo_console
+%{gem_instdir}/bin/
 %{gem_libdir}
 %{gem_spec}
 %exclude %{gem_cache}
@@ -125,6 +117,19 @@ popd
 %{gem_instdir}/spec
 
 %changelog
+* Mon Apr 18 2016 Pavel Valena <pvalena@redhat.com> - 2.2.3-5
+- Use rspec tests
+
+* Tue Apr 12 2016 Pavel Valena <pvalena@redhat.com> - 2.2.3-4
+- Fix Fix missing wrapper for mongo_console executable
+  - Resolves: rhbz#1315283
+
+* Wed Apr 06 2016 Pavel Valena <pvalena@redhat.com> - 2.2.3-3
+- Add rubygem-shoulda to BuildReqires (for tests)
+
+* Wed Apr 06 2016 Pavel Valena <pvalena@redhat.com> - 2.2.3-2
+- Enable tests
+
 * Mon Feb 29 2016 Pavel Valena <pvalena@redhat.com> - 2.2.3-1
 - Update to 2.2.3
 
