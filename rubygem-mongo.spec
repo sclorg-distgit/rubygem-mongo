@@ -8,7 +8,7 @@
 %{!?scl_mongodb:%global scl_mongodb rh-mongodb32}
 %{!?scl_prefix_mongodb:%global scl_prefix_mongodb %{scl_mongodb}-}
 
-%global enable_tests 1
+%global enable_tests 0
 
 Name:          %{?scl_prefix}rubygem-%{gem_name}
 Version:       2.2.3
@@ -34,7 +34,7 @@ Provides:      %{?scl_prefix}rubygem(%{gem_name}) = %{version}
 # Explicitly require runtime subpackage, as long as older scl-utils do not generate it
 Requires: %{?scl_prefix}runtime
 
-BuildRequires: %{?scl_prefix_mongodb}mongodb-server
+#BuildRequires: %{?scl_prefix_mongodb}mongodb-server
 
 %description
 A Ruby driver for MongoDB. For more information about Mongo, see
